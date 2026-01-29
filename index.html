@@ -2,141 +2,76 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>One File 3D Car Game</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Car Working</title>
 
 <style>
-html,body{margin:0;overflow:hidden;background:#000}
-#ui{position:fixed;bottom:10px;width:100%;display:flex;justify-content:space-around;z-index:10}
-.btn{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);
-color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center}
-#hud{position:fixed;top:10px;left:10px;color:#fff;font-size:14px;z-index:10}
-.bar{width:120px;height:6px;background:#333;margin-top:4px}
-.fill{height:100%;background:#0f0;width:100%}
+body{margin:0;overflow:hidden;background:#000}
+#btn{
+position:fixed;bottom:20px;left:50%;
+transform:translateX(-50%);
+width:80px;height:80px;border-radius:50%;
+background:rgba(255,255,255,.25);
+color:#fff;font-size:32px;
+display:flex;align-items:center;justify-content:center;
+z-index:10;
+}
 </style>
 </head>
 
 <body>
 
-<div id="hud">
-Speed: <span id="spd">0</span>
-<div class="bar"><div class="fill" id="nitro"></div></div>
-</div>
-
-<div id="ui">
-<div class="btn" id="l">◀</div>
-<div class="btn" id="b">▼</div>
-<div class="btn" id="g">▲</div>
-<div class="btn" id="r">▶</div>
-<div class="btn" id="n">⚡</div>
-</div>
+<div id="btn">GO</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-
 <script>
-/* ===== SCENE ===== */
+/* SCENE */
 const scene=new THREE.Scene();
-scene.fog=new THREE.Fog(0x000000,20,150);
-
-/* CAMERA */
-const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
-
-/* RENDERER */
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,200);
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
-renderer.shadowMap.enabled=true;
 document.body.appendChild(renderer.domElement);
 
 /* LIGHT */
-scene.add(new THREE.HemisphereLight(0xffffff,0x333333,1.2));
-const sun=new THREE.DirectionalLight(0xffffff,1);
-sun.position.set(10,20,10);
-sun.castShadow=true;
-scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
 
 /* ROAD */
 const road=new THREE.Mesh(
-new THREE.PlaneGeometry(1000,30),
-new THREE.MeshStandardMaterial({color:0x1b1b1b})
+new THREE.PlaneGeometry(100,30),
+new THREE.MeshBasicMaterial({color:0x222222})
 );
 road.rotation.x=-Math.PI/2;
-road.receiveShadow=true;
 scene.add(road);
 
 /* CAR */
-const car=new THREE.Group();
-const body=new THREE.Mesh(
-new THREE.BoxGeometry(2.2,.7,4.6),
-new THREE.MeshStandardMaterial({color:0xff3030})
+const car=new THREE.Mesh(
+new THREE.BoxGeometry(2,1,4),
+new THREE.MeshBasicMaterial({color:0xff0000})
 );
-body.castShadow=true;
-car.add(body);
-
-function wheel(x,z){
-const w=new THREE.Mesh(
-new THREE.CylinderGeometry(.45,.45,.5,20),
-new THREE.MeshStandardMaterial({color:0x111})
-);
-w.rotation.z=Math.PI/2;
-w.position.set(x,-.4,z);
-w.castShadow=true;
-car.add(w);
-}
-wheel(-1.1,1.8);wheel(1.1,1.8);wheel(-1.1,-1.8);wheel(1.1,-1.8);
-
-car.position.y=.6;
+car.position.y=.5;
 scene.add(car);
 
-/* PHYSICS */
-let speed=0,steer=0,nitro=1;
-const MAX=1.1,ACC=.025,DRAG=.96;
+/* MOVE LOGIC */
+let speed=0;
 
-/* INPUT */
-let G=0,B=0,L=0,R=0,N=0;
-const bind=(id,v)=>{
-const e=document.getElementById(id);
-e.ontouchstart=()=>window[v]=1;
-e.ontouchend=()=>window[v]=0;
-};
-bind("g","G");bind("b","B");bind("l","L");bind("r","R");bind("n","N");
-
-/* HUD ELEMENTS */
-const spd=document.getElementById("spd");
-const nitroBar=document.getElementById("nitro");
+/* BUTTON – works on ALL phones */
+const btn=document.getElementById("btn");
+btn.addEventListener("pointerdown",()=>speed=0.25);
+btn.addEventListener("pointerup",()=>speed=0);
 
 /* LOOP */
-(function animate(){
+function animate(){
 requestAnimationFrame(animate);
 
-if(G) speed=Math.min(speed+ACC,MAX);
-else speed*=DRAG;
-if(B) speed*=.9;
-
-if(N && nitro>0){ speed+=.04; nitro-=.006; }
-else nitro=Math.min(1,nitro+.003);
-
-if(L) steer+=.002;
-if(R) steer-=.002;
-steer*=.85;
-
-car.rotation.y+=steer*speed*6;
-car.rotation.z=-steer*speed*2;
-car.translateZ(-speed*5);
-
-camera.position.lerp(
-new THREE.Vector3(
-car.position.x,
-car.position.y+5,
-car.position.z+10+speed*5
-),.08);
+car.position.z -= speed;
+camera.position.set(car.position.x,5,car.position.z+10);
 camera.lookAt(car.position);
 
-spd.textContent=Math.floor(speed*100);
-nitroBar.style.width=(nitro*100)+"%";
-
 renderer.render(scene,camera);
-})();
+}
+animate();
 
+/* RESIZE */
 onresize=()=>{
 camera.aspect=innerWidth/innerHeight;
 camera.updateProjectionMatrix();
