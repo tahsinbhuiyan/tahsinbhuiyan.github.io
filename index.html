@@ -1,255 +1,151 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Ultimate Mobile Car Game</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>One File 3D Car Game</title>
+
 <style>
-body { margin:0; overflow:hidden; background:#000; font-family:Arial; }
-canvas { display:block; }
-
-#ui {
-position:fixed;
-top:10px;
-left:10px;
-color:white;
-z-index:10;
-}
-
-#mobile {
-position:fixed;
-bottom:20px;
-width:100%;
-text-align:center;
-}
-
-#mobile button {
-font-size:22px;
-padding:15px 25px;
-margin:10px;
-border-radius:12px;
-border:none;
-background:#222;
-color:white;
-}
-#gameOver {
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-color:white;
-font-size:24px;
-display:none;
-text-align:center;
-}
+html,body{margin:0;overflow:hidden;background:#000;font-family:sans-serif}
+#ui{position:fixed;bottom:10px;width:100%;display:flex;justify-content:space-around;z-index:10}
+.btn{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.15);
+color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center}
+#hud{position:fixed;top:10px;left:10px;color:#fff;font-size:14px}
+.bar{width:120px;height:6px;background:#333;margin-top:4px}
+.fill{height:100%;background:#0f0;width:100%}
 </style>
 </head>
+
 <body>
 
+<div id="hud">
+Speed: <span id="spd">0</span><br>
+Nitro
+<div class="bar"><div class="fill" id="nitro"></div></div>
+</div>
+
 <div id="ui">
-Score: <span id="score">0</span><br>
-High Score: <span id="high">0</span><br>
-Health: <span id="health">100</span><br>
-Nitro: <span id="nitroBar">100</span>
+<div class="btn" id="l">◀</div>
+<div class="btn" id="b">▼</div>
+<div class="btn" id="g">▲</div>
+<div class="btn" id="r">▶</div>
+<div class="btn" id="n">⚡</div>
 </div>
 
-<div id="gameOver">
-GAME OVER<br><br>
-<button onclick="restart()">Restart</button>
-</div>
-
-<canvas id="game"></canvas>
-
-<div id="mobile">
-<button id="left">◀</button>
-<button id="nitroBtn">🔥</button>
-<button id="right">▶</button>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+/* ===== BASIC ENGINE ===== */
+const S=new THREE.Scene();
+S.fog=new THREE.Fog(0x000000,20,140);
 
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+const C=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,400);
+const R=new THREE.WebGLRenderer({antialias:true});
+R.setSize(innerWidth,innerHeight);
+R.shadowMap.enabled=true;
+document.body.appendChild(R.domElement);
 
-let score=0;
-let high=localStorage.getItem("highscore")||0;
-let difficulty=1;
-let gameRunning=true;
-let particles=[];
-let roadOffset=0;
-let dayCycle=0;
+/* ===== LIGHT + DAY/NIGHT ===== */
+let sun=new THREE.DirectionalLight(0xffffff,1);
+sun.position.set(10,20,10);
+sun.castShadow=true;
+S.add(new THREE.HemisphereLight(0x88aaff,0x222233,1));
+S.add(sun);
 
-document.getElementById("high").innerText=high;
+/* ===== ROAD ===== */
+let road=new THREE.Mesh(
+new THREE.PlaneGeometry(800,30),
+new THREE.MeshStandardMaterial({color:0x1b1b1b})
+);
+road.rotation.x=-Math.PI/2;
+road.receiveShadow=true;
+S.add(road);
 
-class Player{
-constructor(){
-this.width=50;
-this.height=100;
-this.x=canvas.width/2-25;
-this.y=canvas.height-150;
-this.speed=0;
-this.maxSpeed=8;
-this.acc=0.3;
-this.friction=0.05;
-this.health=100;
-this.nitro=100;
-this.nitroActive=false;
+/* ===== CAR ===== */
+let car=new THREE.Group();
+let body=new THREE.Mesh(
+new THREE.BoxGeometry(2.2,.7,4.6),
+new THREE.MeshStandardMaterial({color:0xff3030,metalness:.4,roughness:.3})
+);
+body.castShadow=true;
+car.add(body);
+
+function W(x,z){
+let w=new THREE.Mesh(
+new THREE.CylinderGeometry(.45,.45,.5,24),
+new THREE.MeshStandardMaterial({color:0x111})
+);
+w.rotation.z=Math.PI/2;
+w.position.set(x,-.4,z);
+w.castShadow=true;
+car.add(w);
 }
-update(){
-if(this.speed<this.maxSpeed) this.speed+=this.acc;
-if(this.speed>0) this.speed-=this.friction;
-if(this.nitroActive && this.nitro>0){
-this.speed=this.maxSpeed*1.8;
-this.nitro-=0.5;
-}else{
-if(this.nitro<100) this.nitro+=0.2;
-}
-this.x=Math.max(0,Math.min(canvas.width-this.width,this.x));
-document.getElementById("nitroBar").innerText=Math.floor(this.nitro);
-}
-draw(){
-ctx.fillStyle="red";
-ctx.fillRect(this.x,this.y,this.width,this.height);
-}
-}
+W(-1.1,1.8);W(1.1,1.8);W(-1.1,-1.8);W(1.1,-1.8);
 
-class Enemy{
-constructor(){
-this.width=50;
-this.height=100;
-this.x=Math.random()*(canvas.width-50);
-this.y=-100;
-this.speed=3+Math.random()*difficulty;
-}
-update(){ this.y+=this.speed; }
-draw(){
-ctx.fillStyle="blue";
-ctx.fillRect(this.x,this.y,this.width,this.height);
-}
-}
+car.position.y=.6;
+S.add(car);
 
-class Particle{
-constructor(x,y){
-this.x=x;
-this.y=y;
-this.life=20;
-this.size=5+Math.random()*5;
-}
-update(){
-this.life--;
-this.y+=Math.random()*5;
-}
-draw(){
-ctx.fillStyle="orange";
-ctx.fillRect(this.x,this.y,this.size,this.size);
-}
-}
+/* ===== PHYSICS ===== */
+let speed=0,steer=0,nitro=1;
+const MAX=1.1,ACC=.025,DRAG=.96;
 
-let player=new Player();
-let enemies=[];
+/* ===== INPUT ===== */
+let G=0,B=0,L=0,Ri=0,N=0;
+const bind=(i,v)=>{
+let e=document.getElementById(i);
+e.ontouchstart=()=>window[v]=1;
+e.ontouchend=()=>window[v]=0;
+};
+bind("g","G");bind("b","B");bind("l","L");bind("r","Ri");bind("n","N");
 
-function spawnEnemy(){
-if(gameRunning)
-enemies.push(new Enemy());
-}
-setInterval(spawnEnemy,1000);
+/* ===== LOOP ===== */
+let t=0;
+(function loop(){
+requestAnimationFrame(loop);
+t+=.01;
 
-function collision(a,b){
-return a.x<b.x+b.width &&
-a.x+a.width>b.x &&
-a.y<b.y+b.height &&
-a.y+a.height>b.y;
-}
+/* day night */
+sun.intensity=.6+Math.sin(t)*.4;
+S.background=new THREE.Color(`hsl(${200+Math.sin(t)*20},30%,${30+Math.sin(t)*10}%)`);
 
-function drawRoad(){
-roadOffset+=player.speed;
-ctx.fillStyle= dayCycle<500 ? "#444":"#222";
-ctx.fillRect(0,0,canvas.width,canvas.height);
+if(G) speed=Math.min(speed+ACC,MAX);
+if(B) speed*=.9;
+else speed*=DRAG;
 
-ctx.strokeStyle="white";
-ctx.lineWidth=4;
-for(let i=-20;i<canvas.height;i+=40){
-ctx.beginPath();
-ctx.moveTo(canvas.width/2,i+(roadOffset%40));
-ctx.lineTo(canvas.width/2,i+20+(roadOffset%40));
-ctx.stroke();
-}
-}
+if(N && nitro>0){
+speed+=.04;
+nitro-=.005;
+}else nitro=Math.min(1,nitro+.002);
 
-function update(){
-if(!gameRunning) return;
+if(L) steer+=.002;
+if(Ri) steer-=.002;
+steer*=.85;
 
-ctx.clearRect(0,0,canvas.width,canvas.height);
-drawRoad();
+car.rotation.y+=steer*speed*6;
+car.rotation.z=-steer*speed*2;
+car.translateZ(-speed*5);
 
-player.update();
-player.draw();
+/* camera */
+C.position.lerp(
+new THREE.Vector3(
+car.position.x,
+car.position.y+5,
+car.position.z+10+speed*5
+),.08);
+C.lookAt(car.position);
 
-enemies.forEach((e,i)=>{
-e.update();
-e.draw();
+/* HUD */
+spd.textContent=Math.floor(speed*100);
+nitroFill.style.width=(nitro*100)+"%";
 
-if(collision(player,e)){
-player.health-=10;
-for(let p=0;p<15;p++) particles.push(new Particle(e.x,e.y));
-enemies.splice(i,1);
-}
+R.render(S,C);
+})();
 
-if(e.y>canvas.height){
-enemies.splice(i,1);
-score++;
-difficulty+=0.05;
-}
-});
-
-particles.forEach((p,i)=>{
-p.update();
-p.draw();
-if(p.life<=0) particles.splice(i,1);
-});
-
-if(player.health<=0){
-gameOver();
-}
-
-document.getElementById("score").innerText=score;
-document.getElementById("health").innerText=player.health;
-
-dayCycle++;
-if(dayCycle>1000) dayCycle=0;
-
-requestAnimationFrame(update);
-}
-
-function gameOver(){
-gameRunning=false;
-document.getElementById("gameOver").style.display="block";
-if(score>high){
-localStorage.setItem("highscore",score);
-}
-}
-
-function restart(){
-location.reload();
-}
-
-update();
-
-
-// Controls
-document.getElementById("left").ontouchstart=()=>player.x-=40;
-document.getElementById("right").ontouchstart=()=>player.x+=40;
-document.getElementById("nitroBtn").ontouchstart=()=>player.nitroActive=true;
-document.getElementById("nitroBtn").ontouchend=()=>player.nitroActive=false;
-
-window.addEventListener("keydown",e=>{
-if(e.key==="ArrowLeft") player.x-=20;
-if(e.key==="ArrowRight") player.x+=20;
-if(e.key===" ") player.nitroActive=true;
-});
-window.addEventListener("keyup",()=>player.nitroActive=false);
-
+onresize=()=>{
+C.aspect=innerWidth/innerHeight;
+C.updateProjectionMatrix();
+R.setSize(innerWidth,innerHeight);
+};
 </script>
 </body>
 </html>
