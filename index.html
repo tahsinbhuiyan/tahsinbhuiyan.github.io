@@ -6,11 +6,11 @@
 <title>One File 3D Car Game</title>
 
 <style>
-html,body{margin:0;overflow:hidden;background:#000;font-family:sans-serif}
+html,body{margin:0;overflow:hidden;background:#000}
 #ui{position:fixed;bottom:10px;width:100%;display:flex;justify-content:space-around;z-index:10}
-.btn{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.15);
+.btn{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);
 color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center}
-#hud{position:fixed;top:10px;left:10px;color:#fff;font-size:14px}
+#hud{position:fixed;top:10px;left:10px;color:#fff;font-size:14px;z-index:10}
 .bar{width:120px;height:6px;background:#333;margin-top:4px}
 .fill{height:100%;background:#0f0;width:100%}
 </style>
@@ -19,8 +19,7 @@ color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center
 <body>
 
 <div id="hud">
-Speed: <span id="spd">0</span><br>
-Nitro
+Speed: <span id="spd">0</span>
 <div class="bar"><div class="fill" id="nitro"></div></div>
 </div>
 
@@ -35,44 +34,47 @@ Nitro
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
-/* ===== BASIC ENGINE ===== */
-const S=new THREE.Scene();
-S.fog=new THREE.Fog(0x000000,20,140);
+/* ===== SCENE ===== */
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0x000000,20,150);
 
-const C=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,400);
-const R=new THREE.WebGLRenderer({antialias:true});
-R.setSize(innerWidth,innerHeight);
-R.shadowMap.enabled=true;
-document.body.appendChild(R.domElement);
+/* CAMERA */
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
 
-/* ===== LIGHT + DAY/NIGHT ===== */
-let sun=new THREE.DirectionalLight(0xffffff,1);
+/* RENDERER */
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+/* LIGHT */
+scene.add(new THREE.HemisphereLight(0xffffff,0x333333,1.2));
+const sun=new THREE.DirectionalLight(0xffffff,1);
 sun.position.set(10,20,10);
 sun.castShadow=true;
-S.add(new THREE.HemisphereLight(0x88aaff,0x222233,1));
-S.add(sun);
+scene.add(sun);
 
-/* ===== ROAD ===== */
-let road=new THREE.Mesh(
-new THREE.PlaneGeometry(800,30),
+/* ROAD */
+const road=new THREE.Mesh(
+new THREE.PlaneGeometry(1000,30),
 new THREE.MeshStandardMaterial({color:0x1b1b1b})
 );
 road.rotation.x=-Math.PI/2;
 road.receiveShadow=true;
-S.add(road);
+scene.add(road);
 
-/* ===== CAR ===== */
-let car=new THREE.Group();
-let body=new THREE.Mesh(
+/* CAR */
+const car=new THREE.Group();
+const body=new THREE.Mesh(
 new THREE.BoxGeometry(2.2,.7,4.6),
-new THREE.MeshStandardMaterial({color:0xff3030,metalness:.4,roughness:.3})
+new THREE.MeshStandardMaterial({color:0xff3030})
 );
 body.castShadow=true;
 car.add(body);
 
-function W(x,z){
-let w=new THREE.Mesh(
-new THREE.CylinderGeometry(.45,.45,.5,24),
+function wheel(x,z){
+const w=new THREE.Mesh(
+new THREE.CylinderGeometry(.45,.45,.5,20),
 new THREE.MeshStandardMaterial({color:0x111})
 );
 w.rotation.z=Math.PI/2;
@@ -80,71 +82,65 @@ w.position.set(x,-.4,z);
 w.castShadow=true;
 car.add(w);
 }
-W(-1.1,1.8);W(1.1,1.8);W(-1.1,-1.8);W(1.1,-1.8);
+wheel(-1.1,1.8);wheel(1.1,1.8);wheel(-1.1,-1.8);wheel(1.1,-1.8);
 
 car.position.y=.6;
-S.add(car);
+scene.add(car);
 
-/* ===== PHYSICS ===== */
+/* PHYSICS */
 let speed=0,steer=0,nitro=1;
 const MAX=1.1,ACC=.025,DRAG=.96;
 
-/* ===== INPUT ===== */
-let G=0,B=0,L=0,Ri=0,N=0;
-const bind=(i,v)=>{
-let e=document.getElementById(i);
+/* INPUT */
+let G=0,B=0,L=0,R=0,N=0;
+const bind=(id,v)=>{
+const e=document.getElementById(id);
 e.ontouchstart=()=>window[v]=1;
 e.ontouchend=()=>window[v]=0;
 };
-bind("g","G");bind("b","B");bind("l","L");bind("r","Ri");bind("n","N");
+bind("g","G");bind("b","B");bind("l","L");bind("r","R");bind("n","N");
 
-/* ===== LOOP ===== */
-let t=0;
-(function loop(){
-requestAnimationFrame(loop);
-t+=.01;
+/* HUD ELEMENTS */
+const spd=document.getElementById("spd");
+const nitroBar=document.getElementById("nitro");
 
-/* day night */
-sun.intensity=.6+Math.sin(t)*.4;
-S.background=new THREE.Color(`hsl(${200+Math.sin(t)*20},30%,${30+Math.sin(t)*10}%)`);
+/* LOOP */
+(function animate(){
+requestAnimationFrame(animate);
 
 if(G) speed=Math.min(speed+ACC,MAX);
-if(B) speed*=.9;
 else speed*=DRAG;
+if(B) speed*=.9;
 
-if(N && nitro>0){
-speed+=.04;
-nitro-=.005;
-}else nitro=Math.min(1,nitro+.002);
+if(N && nitro>0){ speed+=.04; nitro-=.006; }
+else nitro=Math.min(1,nitro+.003);
 
 if(L) steer+=.002;
-if(Ri) steer-=.002;
+if(R) steer-=.002;
 steer*=.85;
 
 car.rotation.y+=steer*speed*6;
 car.rotation.z=-steer*speed*2;
 car.translateZ(-speed*5);
 
-/* camera */
-C.position.lerp(
+camera.position.lerp(
 new THREE.Vector3(
 car.position.x,
 car.position.y+5,
 car.position.z+10+speed*5
 ),.08);
-C.lookAt(car.position);
+camera.lookAt(car.position);
 
-/* HUD */
 spd.textContent=Math.floor(speed*100);
-nitroFill.style.width=(nitro*100)+"%";
+nitroBar.style.width=(nitro*100)+"%";
 
-R.render(S,C);
+renderer.render(scene,camera);
 })();
 
 onresize=()=>{
-C.aspect=innerWidth/innerHeight;
-C.updateProjectionMatrix();
-R.setSize(innerWidth,innerHeight);
+camera.aspect=innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
 };
 </script>
 </body>
